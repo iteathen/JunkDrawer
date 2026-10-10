@@ -403,3 +403,62 @@ fn prefixed_peer_does_not_justify_gdd_when_early_growth_is_at_most_k(){
     assert_eq!(lab.disconnect_one_gdd(20),Err(Error::Unavailable));
     assert!(!lab.records().iter().any(|x|x.why==Reason::GddDisconnected));
 }
+
+#[test]
+fn properly_grown_honest_chain_can_exclude_a_lagging_proper_prefix_conditionally(){
+    // Positive control for the two prefix-growth regressions: the assumed
+    // honest history has four genuinely signed early-window blocks >k=1.
+    // A full, independently replayed older prefix is not allowed to stall
+    // the lab indefinitely *when* that conditional density premise holds.
+    let (_,prefix,honest,_)=roots();
+    let mut lab=EventDriven::new(&honest,1,config()).unwrap();
+    lab.connect(10).unwrap();
+    lab.connect(20).unwrap();
+    lab.assume_honest_upstream(10).unwrap();
+    let mut time=0;
+    feed(&mut lab,10,&honest,&mut time);
+    feed(&mut lab,20,&prefix,&mut time);
+    let state=lab.snapshot().unwrap();
+    assert_eq!(state.mode,GsmMode::Syncing);
+    assert_eq!(state.proposed_gdd_drops,vec![20]);
+    assert_eq!(state.honest_growth_and_dominance,Some(true));
+    lab.disconnect_one_gdd(20).unwrap();
+    assert_eq!(lab.snapshot().unwrap().active_peers,vec![10]);
+    assert_eq!(lab.mode,GsmMode::CaughtUp);
+    // The local selected economic history was independently fixed at
+    // construction. This conditional test never chooses a winning branch.
+}
+
+#[test]
+fn observed_peer_reorganization_revokes_verified_candidate_before_loe_rechecks(){
+    let (_g,_,honest,other)=roots();
+    let mut lab=EventDriven::new(&honest,1,config()).unwrap();
+    lab.connect(10).unwrap();
+    lab.connect(20).unwrap();
+    lab.assume_honest_upstream(10).unwrap();
+    let mut time=0;
+    feed(&mut lab,10,&honest,&mut time);
+    feed(&mut lab,20,&other,&mut time);
+    let before=lab.snapshot().unwrap();
+    assert_eq!(before.proposed_gdd_drops,vec![20]);
+    // The SAME authenticated transport endpoint switches to another
+    // independently produced signed original-genesis history. The actual
+    // header response must be an explicit RollBack, not an invented tip.
+    let q=lab.begin_poll(20).unwrap();
+    let actual=respond(&honest,&q).unwrap();
+    assert!(matches!(actual,Reply::RollBack{height:0,..}));
+    time+=10;
+    assert_eq!(lab.observe(20,actual,time,50),Ok(Observed::Rollback));
+    let rollback=lab.snapshot().unwrap();
+    assert_eq!(rollback.pending_economic_replay,vec![20]);
+    assert!(rollback.source_trial.is_none());
+    assert_eq!(lab.mode,GsmMode::Syncing);
+    assert!(lab.records().iter().any(|entry|
+        entry.id==Some(20)&&entry.why==Reason::ObservedRollback));
+    feed(&mut lab,20,&honest,&mut time);
+    let healed=lab.snapshot().unwrap();
+    assert_eq!(healed.pending_economic_replay,Vec::<u16>::new());
+    assert_eq!(healed.active_peers,vec![10,20]);
+    assert!(healed.proposed_gdd_drops.is_empty());
+    assert_eq!(lab.mode,GsmMode::CaughtUp);
+}
