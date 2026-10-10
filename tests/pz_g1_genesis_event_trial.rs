@@ -352,3 +352,54 @@ fn proposed_gdd_drops_do_not_implicitly_change_sync_state_or_remove_peers(){
     assert_eq!(lab.snapshot().unwrap().active_peers,vec![10]);
     assert_eq!(lab.mode,GsmMode::CaughtUp);
 }
+
+#[test]
+fn prefixed_peer_does_not_justify_gdd_when_assumed_honest_chain_has_zero_early_growth(){
+    // Legitimately VRF/KES-produced and independently replayed histories:
+    // the test-labelled honest chain grows *only after* the four-slot
+    // source-density window. The other peer is a valid older PREFIX.
+    //
+    // The original lab's dominance predicate skipped prefix peers entirely,
+    // which would label absent early honest growth as justified GDD safety.
+    let (_,old_prefix,_,late)=roots();
+    let mut lab=EventDriven::new(&late,1,config()).unwrap();
+    lab.connect(10).unwrap();
+    lab.connect(20).unwrap();
+    lab.assume_honest_upstream(10).unwrap();
+    let mut clock=0;
+    feed(&mut lab,10,&late,&mut clock);
+    feed(&mut lab,20,&old_prefix,&mut clock);
+    let snapshot=lab.snapshot().unwrap();
+    assert_eq!(snapshot.mode,GsmMode::Syncing);
+    assert_eq!(snapshot.proposed_gdd_drops,vec![20]);
+    assert_eq!(snapshot.honest_growth_and_dominance,Some(false),
+        "a mere prefix peer cannot waive the honest chain-growth premise");
+    assert_eq!(lab.disconnect_one_gdd(20),Err(Error::Unavailable));
+    assert_eq!(lab.snapshot().unwrap().active_peers,vec![10,20]);
+}
+
+#[test]
+fn prefixed_peer_does_not_justify_gdd_when_early_growth_is_at_most_k(){
+    let (g,prefix,_,_)=roots();
+    let mut partly_grown=prefix.clone();
+    let mut signer=proposer();
+    // Relative to last shared block at slot 1, the s=4 window contains
+    // *one* honest block at slot 2: not strictly more than k=1.
+    for slot in [2,7,8,9] {
+        step(&mut partly_grown,&mut signer,slot);
+    }
+    let partly_grown=Chain::replay(g,&partly_grown.blocks).unwrap();
+    let mut lab=EventDriven::new(&partly_grown,1,config()).unwrap();
+    lab.connect(10).unwrap();
+    lab.connect(20).unwrap();
+    lab.assume_honest_upstream(10).unwrap();
+    let mut clock=0;
+    feed(&mut lab,10,&partly_grown,&mut clock);
+    feed(&mut lab,20,&prefix,&mut clock);
+    let snapshot=lab.snapshot().unwrap();
+    assert_eq!(snapshot.mode,GsmMode::Syncing);
+    assert_eq!(snapshot.proposed_gdd_drops,vec![20]);
+    assert_eq!(snapshot.honest_growth_and_dominance,Some(false));
+    assert_eq!(lab.disconnect_one_gdd(20),Err(Error::Unavailable));
+    assert!(!lab.records().iter().any(|x|x.why==Reason::GddDisconnected));
+}
