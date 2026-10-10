@@ -91,7 +91,6 @@ fn qualified_honest_early_density_allows_one_lab_gdd_drop_and_loe_progress(){
     feed(&mut lab,10,&honest,&mut clock);
     feed(&mut lab,20,&weak,&mut clock);
     let before=lab.snapshot().unwrap();
-    eprintln!("JUNK_DRAWER_DIAG_EARLY_GDD {before:#?}");
     assert_eq!(before.honest_source_assumed,Some(10));
     assert_eq!(before.honest_growth_and_dominance,Some(true));
     assert_eq!(before.proposed_gdd_drops,vec![20]);
@@ -232,7 +231,6 @@ fn gdd_cooldown_separates_disconnections_and_reevaluates_loe(){
     feed(&mut lab,20,&weak,&mut clock);
     feed(&mut lab,21,&weak,&mut clock);
     let s=lab.snapshot().unwrap();
-    eprintln!("JUNK_DRAWER_DIAG_COOLDOWN_GDD {s:#?}");
     assert_eq!(s.proposed_gdd_drops,vec![20,21]);
     lab.disconnect_one_gdd(20).unwrap();
     assert_eq!(lab.disconnect_one_gdd(21),Err(Error::Unavailable));
@@ -330,4 +328,27 @@ fn rejoining_peer_id_needs_a_new_external_honest_availability_assumption(){
     assert_eq!(lab.mode,GsmMode::PreSyncing);
     lab.assume_honest_upstream(10).unwrap();
     assert_eq!(lab.mode,GsmMode::Syncing);
+}
+
+#[test]
+fn proposed_gdd_drops_do_not_implicitly_change_sync_state_or_remove_peers(){
+    let (_,_,honest,weak)=roots();
+    let mut lab=EventDriven::new(&honest,1,config()).unwrap();
+    lab.connect(10).unwrap();lab.connect(20).unwrap();
+    lab.assume_honest_upstream(10).unwrap();
+    let mut clock=0;
+    feed(&mut lab,10,&honest,&mut clock);
+    assert_eq!(lab.mode,GsmMode::Syncing);
+    feed(&mut lab,20,&weak,&mut clock);
+    let candidate=lab.snapshot().unwrap();
+    assert_eq!(candidate.mode,GsmMode::Syncing);
+    assert_eq!(candidate.proposed_gdd_drops,vec![20]);
+    assert_eq!(candidate.active_peers,vec![10,20]);
+    assert_eq!(candidate.source_trial.unwrap().mode,GsmMode::Syncing);
+    assert!(!lab.records().iter().any(|r|r.why==Reason::GddDisconnected));
+    // A *separate*, guarded act of removing an actual peer must precede
+    // concluding that the remaining verified source is caught up.
+    lab.disconnect_one_gdd(20).unwrap();
+    assert_eq!(lab.snapshot().unwrap().active_peers,vec![10]);
+    assert_eq!(lab.mode,GsmMode::CaughtUp);
 }

@@ -321,7 +321,14 @@ impl EventDriven {
                 // A pending poll or expired AwaitReply defeats the short-
                 // poll model's simultaneous exhausted-header observation.
                 // This never authorizes ledger selection or chain rollback.
-                if !self.peers.values().any(|p|p.poll_started.is_some()) &&
+                // IMPORTANT: trace.proposed_drops are diagnostic GDD
+                // candidates, NOT disconnects that have actually occurred.
+                // CaughtUp must never silently ignore an active dissenting
+                // peer just because the read-only model *suggests* dropping
+                // it. Stay Syncing until an explicit guarded disconnection
+                // has changed the actual peer set and LoE is re-evaluated.
+                if trace.proposed_drops.is_empty() && !trace.all_dropped &&
+                   !self.peers.values().any(|p|p.poll_started.is_some()) &&
                    views.iter().all(|v|v.header_state==HeaderState::AwaitingReply){
                     self.mode=genesis_sync_trial::next_mode(
                         self.mode,self.effective_haa(),false,
