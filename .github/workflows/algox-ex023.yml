@@ -1,0 +1,30 @@
+name: AlgoX Experiment 023 - public isolated test snapshot
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "Cargo.toml"
+      - ".github/workflows/algox-ex023.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-verified-economy-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Experiment 023 - original event-driven signed-history tests
+        run: cargo test --test pz_g1_genesis_event_trial -- --nocapture
+      - name: Prior source-sync and observed-header regressions
+        run: cargo test --test pz_g1_genesis_sync_trial --test pz_g1_chain_sync_observe
+      - name: Original deterministic PZ-G1 consensus regressions
+        run: cargo test --test pz_g1_consensus
+      - name: Minimal public crate library compilation
+        run: cargo check --lib
