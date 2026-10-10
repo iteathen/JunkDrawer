@@ -371,7 +371,15 @@ impl EventDriven {
             let shared=honest.blocks.iter().zip(&p.history.blocks)
                 .take_while(|(x,y)|x.id(&self.genesis.id())==y.id(&self.genesis.id()))
                 .count();
-            if shared==p.history.blocks.len(){continue;}
+            // A chain IDENTICAL to the assumed honest history creates no
+            // competing post-intersection window, so it needs no density
+            // comparison. A PROPER PREFIX is different: the honest source
+            // must still have grown by >k inside the s-slot window before
+            // its apparent superiority can qualify a GDD disconnection.
+            // Skipping all prefix peers silently waived this essential
+            // source chain-growth premise (Experiment 024 regression).
+            if shared==p.history.blocks.len() &&
+               shared==honest.blocks.len(){continue;}
             let start=if shared==0{0}else{honest.blocks[shared-1].slot};
             let end=start.checked_add(s)?;
             let h=honest.blocks[shared..].iter()
