@@ -15,4 +15,8 @@ cargo test --test pz_g1_genesis_event_trial
 cargo test --test pz_g1_genesis_sync_trial --test pz_g1_chain_sync_observe --test pz_g1_consensus
 ```
 
-**Test feedback:** The first public run of the 12-case event suite found two real red assertions: read-only GDD removal candidates were mistakenly treated as already disconnected, allowing premature `CaughtUp`. The source `89904ab` adds a fail-closed guard and a thirteenth adversarial regression. The original network consensus problem remains open.
+**Verified public CI:** [run 38035113088](https://github.com/iteathen/JunkDrawer/actions/runs/38035113088) at JunkDrawer commit `77f36677ffcffe644f85ace7fe964145cba50298` **PASSED** all **41** independent Rust tests: **13 Experiment 023 event-state cases**, **10 Genesis source-sync cases**, **5 observed-header cases** and **13 deterministic PZ-G1 consensus cases**, followed by `cargo check --lib`.
+
+**Bug found and corrected:** The first public run [38034796791](https://github.com/iteathen/JunkDrawer/actions/runs/38034796791) compiled successfully but failed 2 of 12 event tests: the source trial promoted `CaughtUp` using **proposed** GDD peer drops before the peers had actually been disconnected. AlgoX source [`89904ab`](https://github.com/iteathen/AlgoX/commit/89904ab42738519dd182d139fe0a44ced26f1b6d) requires that no unapplied GDD proposal remain before a caught-up transition and adds a thirteenth regression. The public snapshot mirrors that corrected source.
+
+**Scope:** This is a reduced public test extraction with a pared-down Core module graph. It verifies those exact research modules and signed-history tests under Rust, **not** the complete private AlgoX crate, compiled WebAssembly, the native 40-process swarm, Ouroboros theorem correspondence, HAA or trustworthy canonical economic consensus. The private repo's GitHub-hosted Actions allowance remains exhausted.
