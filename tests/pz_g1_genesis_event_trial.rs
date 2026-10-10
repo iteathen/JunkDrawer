@@ -91,6 +91,7 @@ fn qualified_honest_early_density_allows_one_lab_gdd_drop_and_loe_progress(){
     feed(&mut lab,10,&honest,&mut clock);
     feed(&mut lab,20,&weak,&mut clock);
     let before=lab.snapshot().unwrap();
+    eprintln!("JUNK_DRAWER_DIAG_EARLY_GDD {before:#?}");
     assert_eq!(before.honest_source_assumed,Some(10));
     assert_eq!(before.honest_growth_and_dominance,Some(true));
     assert_eq!(before.proposed_gdd_drops,vec![20]);
@@ -231,6 +232,7 @@ fn gdd_cooldown_separates_disconnections_and_reevaluates_loe(){
     feed(&mut lab,20,&weak,&mut clock);
     feed(&mut lab,21,&weak,&mut clock);
     let s=lab.snapshot().unwrap();
+    eprintln!("JUNK_DRAWER_DIAG_COOLDOWN_GDD {s:#?}");
     assert_eq!(s.proposed_gdd_drops,vec![20,21]);
     lab.disconnect_one_gdd(20).unwrap();
     assert_eq!(lab.disconnect_one_gdd(21),Err(Error::Unavailable));
